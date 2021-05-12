@@ -5,6 +5,7 @@ Trapperu Real (Romanian for "The Real Trapper") is a telegram bot made to annoy 
 ## What does the bot do?
 
 * /joaco - Iane, joaco (Romanian for "[Ian](https://www.youtube.com/channel/UCXEsaxE4BOzgDKa2kG48koA), play it")
+* /adauga [Expression]~[message] - Add an expression that everytime it evaluates to true, the bot responds with the given message.
 
 ## Installation
 
