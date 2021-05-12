@@ -1,11 +1,10 @@
-// This bot answers how many messages it received in total on every message.
-
 use std::collections::HashMap;
 
 use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
 use teloxide::prelude::*;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 mod trapper;
 
@@ -14,7 +13,6 @@ lazy_static! {
         Arc::new(Mutex::new(HashMap::new()))
     };
 }
-
 
 #[tokio::main]
 async fn main() {
@@ -25,22 +23,25 @@ async fn run() {
     teloxide::enable_logging!();
     log::info!("Starting shared_state_bot...");
 
-    let bot = Bot::from_env();
+    let bot = Bot::from_env().auto_send();
     
     Dispatcher::new(bot)
-        .messages_handler(|rx: DispatcherHandlerRx<Message>| {
-            rx.for_each_concurrent(None, |message| async move {
-                let chat = message.update.chat_id();
-                let trapper = if let Some(x) = STATEMAP.lock().unwrap().remove(&chat) {
-                    x
-                } else {
-                    trapper::Trapper::new()
-                };
+        .messages_handler(|rx: DispatcherHandlerRx<AutoSend<Bot>, Message>| {
+            UnboundedReceiverStream::new(rx)
+                .for_each_concurrent(None, |message| async move {
+                    let chat = message.update.chat_id();
+                    let mut trapper = if let Some(x) = STATEMAP.lock().unwrap().remove(&chat) {
+                        x
+                    } else {
+                        trapper::Trapper::new()
+                    };
 
-                trapper.process_message(message).await;
-                STATEMAP.lock().unwrap().insert(chat, trapper);
-            })
+                    trapper.process_message(message).await;
+                    STATEMAP.lock().unwrap().insert(chat, trapper);
+                })
         })
         .dispatch()
         .await;
+
+    log::info!("Coaie");
 }
