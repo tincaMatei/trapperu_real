@@ -7,10 +7,10 @@ Note: The responses of the bot are all in Romanian and they may contain vulgar l
 ## What does the bot do?
 
 * /joaco - Iane, joaco (Romanian for "[Ian](https://www.youtube.com/channel/UCXEsaxE4BOzgDKa2kG48koA), play it")
-* /adauga [Expression]~[message] - Add an expression that everytime it evaluates to true, the bot responds with the given message.
+* /adauga [Group_Id]~[Expression]~[message] - Add an expression that everytime it evaluates to true, the bot responds with the given message. You may ommit the group id
 * /taci - Shut down the bot (but only if you're the admin)
 * /help - Offers information about other commands
-* /alias - At the moment only 
+* /alias - At the moment it only returns the id of the group
 
 ## Installation
 
