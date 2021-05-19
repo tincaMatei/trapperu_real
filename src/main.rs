@@ -14,12 +14,18 @@ use teloxide::types::{MessageKind, MediaKind};
 
 use crate::trapper::adauga::Expression;
 use crate::trapper::Trapper;
+use bimap::BiMap;
+use crate::constants::*;
 
 mod trapper;
+mod constants;
 
 lazy_static! {
+    static ref ALIASES: Arc<Mutex<BiMap<String, i64>>> = {
+        Arc::new(Mutex::new(load_aliases()))
+    };
     static ref STATEMAP: Arc<Mutex<HashMap<i64, trapper::Trapper> > > = {
-        Arc::new(Mutex::new(load_commands()))
+        Arc::new(Mutex::new(load_bot_data()))
     };
     static ref BOT_NAME: String = {
         std::env::var("BOT_NAME")
@@ -31,84 +37,13 @@ lazy_static! {
     };
 }
 
-const HELP_DEFAULT: &str = "Cel mai adevarat bot, va arat cum se face smecherie.
 
-Lectii in smecherie, pe capitole (scrie randurile alea complet ca sa vezi capitolul):
-/help joaco
-/help adauga
-/help taci
-/help alias
-/help help
+fn save_bot_data() {
+    log::info!("Saving all bot data");
 
-Celalalte comenzi de pe acolo care mai apar momentan sunt la harneala, mai aveti rabdare
-";
-
-const HELP_ALIAS_TAB: &str = "alias";
-const HELP_ALIAS: &str = "Schimb aicea numele si chestii pe aici:
-
-/alias
-Aici iti zic id-ul grupului si aliasul grupului.
-
-/alias [nume]    (**NEIMPLEMENTAT**)
-Tin minte ca daca zici de acuma [nume], te referi defapt la id, poti sa faci direct in loc de:
-/adauga [ceva numar random]~[Expresie]~[Mesaj]
-poti sa faci
-/alias coaie
-/adauga coaie~[Expresie]~[Mesaj]
-";
-
-const HELP_HELP_TAB: &str = "help";
-const HELP_HELP: &str = "Te ajut in pula mea calmeaza-te";
-
-const HELP_TACI_TAB: &str = "taci";
-const HELP_TACI: &str = "Incearca sa vezi ce face /taci, hai coaie te provoc, nu te tine";
-
-const HELP_JOACO_TAB: &str = "joaco";
-const HELP_JOACO: &str = "[LYRICS]
-(Azteca)
-Sa moara familia mea
-(Ian)
-lasama
-(Azteca)
-Sa moara familia mea
-(Ian)
-lasama ba lasama
-(???)
-BA BAAA
-(Ian)
-Ce-i cu figurile astea pa tine?
-(Oscar)
-Ba, ba! Joaco!
-(Ian)
-Leilaaa! Leilalala leila leilaa aaaaaaaaaaaaaaaaaaaaaaaa";
-
-const HELP_ADAUGA_TAB: &str = "adauga";
-const HELP_ADAUGA: &str = "Fii atent coaie te arat cum se face smecherie cu adaugatul.
-
-Ai urmatoarele variante:
-/adauga [Expresie]~[Mesaj]
-/adauga [Id]~[Expresie]~[Mesaj]
-
-[Mesaj] este un mesaj oarecare cu care raspund daca expresia [Expresie] este adevarata.
-
-Unde la [Expresie] ai ceva de genul \"a&b|(c|d&e)\", unde a, b, c, d si e sunt chestii cu \
-litere si cifre, doar astea, sa nu aiba altele dintre care si spatii (daca bagi spatii \
-vezi ca le ignor direct si daca ai o expresie \"a b\", atunci se triggereste daca zici ab). \
-Daca expresia este corecta dpdv gramatical, atunci cand cineva trimite un mesaj, eu o sa \
-inlocuiesc fiecare cuvant din expresia aia cu adevarat daca apare sau fals daca nu apare \
-si daca la sfarsit expresia este adevarata, atunci o sa zic mesajul de mai sus.
-
-De exemplu, daca dau comanda \"/adauga a&(b|c)~test\", o sa raspunc tu \"test\" daca cineva \
-zice cuvantul a si unul din cuvintele b si c absolut oriunde in propozitie.
-
-[Id] este id-ul unui grup. Daca vrei sa bagi o comanda, dar sa nu o vada ceilalti din grup, \
-bagi acolo id-ul la inceput si trimiti mesajul ala la mine in privat. Cum afli id-ul grupului? \
-Idk sincer, asteapta sa apara comanda /alias.";
-
-fn exit_program() {
     let mut statemap = STATEMAP.lock().unwrap();
     let mut all_commands: Vec<Expression> = Vec::new();
-
+    let mut all_thoughts: Vec<(String, i64)> = Vec::new();
     let hash_keys: Vec<i64> = statemap.keys().map(|x| { *x } ).collect();
 
     for k in hash_keys {
@@ -118,22 +53,92 @@ fn exit_program() {
             while trapper.commands.len() > 0 {
                 all_commands.push(trapper.commands.pop().unwrap());
             }
+            while trapper.thoughts.len() > 0 {
+                all_thoughts.push((trapper.thoughts.pop().unwrap(), k));
+            }
         }
     }
 
-    let serialized = serde_json::to_string(&all_commands).unwrap();
+    let serialized_comm = serde_json::to_string(&all_commands).unwrap();
+    let serialized_thoughts = serde_json::to_string(&all_thoughts).unwrap();
 
-    let mut file = File::create("data.JSON").unwrap();
-    file.write_all(serialized.as_bytes())
-        .expect("Failed to write all the data in the file");
+    let file = File::create("data.JSON");
+    match file {
+    Ok(mut file) => {
+        file.write_all(serialized_comm.as_bytes())
+            .expect("Failed to write all the data in the file");
+        
+    }
+    Err(x) => {
+        log::info!("Failed to create data.JSON: {}", x);
+    }
+    }
+    
+    let file = File::create("thoughts.JSON");
+    match file {
+    Ok(mut file) => {
+        file.write_all(serialized_thoughts.as_bytes())
+            .expect("Failed to write all the data in the file");
+    }
+    Err(x) => {
+        log::info!("Failed to create thoughts.JSON: {}", x);
+    }
+    }
+
+    log::info!("Saved all bot data");
+}
+
+fn save_aliases() {
+    log::info!("Saving all aliases");
+
+    let aliases = ALIASES.lock().unwrap();
+    let all_aliases: Vec<(String, i64)> = aliases.iter().map(|x| { (x.0.clone(), *x.1) } )
+        .collect();
+
+    let serialized = serde_json::to_string(&all_aliases).unwrap();
+
+    let file = File::create("aliases.JSON");
+    match file {
+    Ok(mut file) => {
+        file.write_all(serialized.as_bytes())
+            .expect("Failed to write all the data in the file");
+        log::info!("Saved all aliases");
+    }
+    Err(x) => {
+        log::info!("Failed to create aliases.JSON: {}", x);
+    }
+    }
+}
+
+fn exit_program() {
+    save_bot_data();
+    save_aliases();
 
     log::info!("Shutting down bot...");
     std::process::exit(0);
 }
 
-fn load_commands() -> HashMap<i64, trapper::Trapper> {
-    let deserialized = fs::read_to_string("data.JSON").unwrap();
-    let mut all_commands: Vec<Expression> = serde_json::from_str(&deserialized).unwrap();
+fn load_bot_data() -> HashMap<i64, trapper::Trapper> {
+    log::info!("Loading all commands");
+    let deserialized = fs::read_to_string("data.JSON");
+
+    let deserialized = match deserialized {
+    Ok(x)  => { x }
+    Err(x) => {
+        log::error!("Failed to read data from data.JSON: {}", x);
+        String::new()
+    }
+    };
+
+    let all_commands = serde_json::from_str(&deserialized);
+    let mut all_commands: Vec<Expression> = match all_commands {
+    Ok(x) => { x }
+    Err(x) => {
+        log::error!("Failed deserializing data.JSON: {}", x);
+        Vec::new()
+    }
+    };
+
     let mut statemap: HashMap<i64, trapper::Trapper> = HashMap::new();
 
     while !all_commands.is_empty() {
@@ -151,7 +156,59 @@ fn load_commands() -> HashMap<i64, trapper::Trapper> {
         statemap.insert(chat_id, trapper);
     }
     
+    log::info!("Loaded all commands");
+
+    log::info!("Loading all thoughts");
+    let deserialized = fs::read_to_string("thoughts.JSON");
+
+    let deserialized = match deserialized {
+    Ok(x) => { x }
+    Err(x) => {
+        log::info!("Failed to read data from thoughts.JSON: {}", x);
+        String::new()
+    }
+    };
+
+    let all_thoughts = serde_json::from_str(&deserialized);
+    let mut all_thoughts: Vec<(String, i64)> = match all_thoughts {
+    Ok(x) => { x }
+    Err(x) => {
+        log::info!("Failed deserializing thoughts.JSON: {}", x);
+        Vec::new()
+    }
+    };
+
+    while !all_thoughts.is_empty() {
+        // this shouldn't panic
+        let (thought, chat_id) = all_thoughts.pop().unwrap();
+        let mut trapper = match statemap.remove(&chat_id) { 
+            Some(x) => { x } 
+            None => {trapper::Trapper::new()} 
+        };
+    
+        trapper.thoughts.push(thought);
+        statemap.insert(chat_id, trapper);
+    }
+
     statemap
+}
+
+fn load_aliases() -> BiMap<String, i64> {
+    log::info!("Loading all aliases");
+    
+    let deserialized = fs::read_to_string("aliases.JSON").unwrap();
+    let mut all_aliases: Vec<(String, i64)> = serde_json::from_str(&deserialized).unwrap();
+    let mut aliases: BiMap<String, i64> = BiMap::new();
+
+    while !all_aliases.is_empty() {
+        // this shouldn't panic
+        let (alias, id) = all_aliases.pop().unwrap();
+        aliases.insert(alias, id);
+    }
+
+    log::info!("Loaded all aliases");
+
+    aliases
 }
 
 #[derive(BotCommand, Debug)]
@@ -167,9 +224,11 @@ enum BotCommands {
     Help(String),
     #[command(description = "Cum ma cunoaste lumea in cartier")]
     Alias(String),
-
-    #[command(description = "Adauga un gind frumos")]
+    #[command(description = "Ati spun un gind frumos de la altii")]
     Gind,
+    #[command(description = "Gandesc")]
+    Gindeste(String),
+
     #[command(description = "Noi fumam cioate in timp ce o dam")]
     Dao,
     #[command(description = "idk, fa ceva")]
@@ -228,21 +287,31 @@ async fn run_command(command: BotCommands, message: UpdateWithCx<AutoSend<Bot>, 
         }
     }
     BotCommands::Adauga(command) => {
-        let mut command = command.to_string();
         let chat_id = message.update.chat_id();
-        if let MessageKind::Common(ref message) = message.update.kind {
+        let tokens: Vec<String> = command.split("~").map(|x| { x.to_string() }).collect();
+        let command = if let MessageKind::Common(ref message) = message.update.kind {
             let user_id = message.from.as_ref().unwrap().id; // If this panics, fuck
-            
-            if command.rmatches("~").count() == 1 {
-                command = chat_id.to_string() + &"~".to_string() + &command;
+            if tokens.len() == 3 {
+                Ok(user_id.to_string() + &"~" + &command)
+            } else if tokens.len() == 2 {
+                match ALIASES.lock().unwrap().get_by_right(&chat_id) {
+                Some(x) => { Ok(user_id.to_string() + &"~" + x + &"~" + &tokens[0] + 
+                                                                 &"~" + &tokens[1]) }
+                None    => { Err(WRONG_ALIAS.to_string()) }
+                }
+            } else {
+                Err(BAD_SEPARATORS.to_string())
             }
-
-            if command.rmatches("~").count() == 2 {
-                command = user_id.to_string() + &"~".to_string() + &command;
-            }
-        }
+        } else {
+            Err("Ce plm mi-ai trimis aici".to_string())
+        };
         
-        let result_command = match add_command(command).await { Ok(x) => {x} Err(x) => {x} } ;
+        let result_command = match command {
+        Ok(command) => {
+            match add_command(command).await { Ok(x) => {x} Err(x) => {x} }
+        }
+        Err(x) => { x }
+        };
         
         message.answer(result_command)
             .await
@@ -266,6 +335,9 @@ async fn run_command(command: BotCommands, message: UpdateWithCx<AutoSend<Bot>, 
         HELP_ALIAS_TAB => {
             HELP_ALIAS
         }
+        HELP_GIND_TAB => {
+            HELP_GIND
+        }
         _ => {
             HELP_DEFAULT
         }
@@ -277,21 +349,122 @@ async fn run_command(command: BotCommands, message: UpdateWithCx<AutoSend<Bot>, 
             .await;
     }
     BotCommands::Alias(alias) => {
-        match alias.as_str() {
+        let response = match alias.as_str() {
         "" => {
             let chat_id = message.update.chat_id();
-            message.answer(format!("Uite aici id-ul chatului sacale: {}", chat_id))
-                .await
-                .log_on_error()
-                .await;
+            let mut response = format!("Uite aici id-ul chatului sacale: {}\n", chat_id);
+            response = response + &match ALIASES.lock().unwrap().get_by_right(&chat_id) {
+            None => { String::new() }
+            Some(x) => { format!("Uite aici aliasul chatului sacale: {}", x) }
+            };
+            response
         }
         _ => {
+            let chat_id = message.update.chat_id();
+            let mut aliases = ALIASES.lock().unwrap();
+            
+            match { aliases.get_by_left(&alias) } {
+            Some(id) => {
+                if *id != chat_id {
+                    "Ce faci sacale, vrei sa furi clout?".to_string()
+                } else {
+                    "Ce faci ma, ai pus deja aliasul asta esti prajit?".to_string()
+                }
+            }
+            None => {
+                let ans = format!("Ti-am schimbat aliasul in: {}", alias);
+                aliases.remove_by_right(&chat_id);
+                aliases.insert(alias, chat_id);
+                ans
+            }
+            }
+        }
+        };
+        message.answer(response)
+            .await
+            .log_on_error()
+            .await;
+    }
+    BotCommands::Gindeste(gind) => {
+        let tokens: Vec<String> = gind.split("~").map(|x| {x.to_string()}).collect();
+        
+        let result: Result<(i64, String), String> = match tokens.len() {
+        0 => {
+            Ok((message.update.chat_id(), String::new()))
+        }
+        1 => {
+            Ok((message.update.chat_id(), tokens[0].clone()))
+        }
+        _ => { 
+            let mut concatenated = tokens[1].clone();
+            for i in 2..tokens.len() {
+                concatenated = concatenated + &"~" + &tokens[i];
+            }
+            
 
+            match ALIASES.lock().unwrap().get_by_left(&tokens[0]) {
+            Some(x) => { Ok((*x, concatenated)) }
+            None    => {
+                let result = i64::from_str(&tokens[0]);
+                match result {
+                Ok(x)  => { Ok((x, concatenated)) }
+                Err(x) => { Err(x.to_string()) }
+                }
+            }
+            }
         }
+        };
+
+        let response = match result {
+        Ok((chat_id, gind)) => {
+            let mut statemap = STATEMAP.lock().unwrap();
+            let mut trapper = match statemap.remove(&chat_id) {
+            None => {
+                trapper::Trapper::new()
+            }
+            Some(x) => { x }
+            };
+        
+            trapper.thoughts.push(gind);
+            statemap.insert(chat_id, trapper);
+            "Am bagat un gind frumos".to_string()
         }
+        Err(x) => {
+            x
+        }
+        };
+
+        message.answer(response)
+            .await
+            .log_on_error()
+            .await;
+    }
+    BotCommands::Gind => {
+        let chat_id = message.update.chat_id();
+        let response = {
+            let mut statemap = STATEMAP.lock().unwrap();
+            let mut trapper = match statemap.remove(&chat_id) {
+                None => { trapper::Trapper::new() }
+                Some(x) => { x }
+            };
+        
+            trapper.shuffle_thoughts();
+            let gind = trapper.thoughts.pop();
+            statemap.insert(chat_id, trapper);
+            
+            match gind {
+            Some(x) => {x}
+            None => { "Nu gindesc, deci nu exist".to_string() }
+            }
+            
+        };
+
+        message.answer(response)
+            .await
+            .log_on_error()
+            .await;
     }
     _ => {
-
     }
     };
 }

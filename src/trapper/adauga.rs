@@ -1,11 +1,8 @@
 use std::str::FromStr;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-
-const BAD_SEPARATORS: &str = "N-ai pus '~' sau ai pus prea multi bombardiere";
-const BAD_PARANTHESES: &str = "Ai belit parantezele la expresie bombardiere";
-const BAD_CHARACTERS: &str = "Nush ce plm ai facut dar nu era corect";
-const BAD_OPERATOR: &str = "Wtf is this";
+use crate::ALIASES;
+use crate::constants::*;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Expression {
@@ -127,28 +124,29 @@ impl FromStr for Expression {
         if tokens.len() != 4 {
             Err(BAD_SEPARATORS.to_string())
         } else {
-            Ok(Expression {
-                added_by: {
-                    let x = i64::from_str(tokens[0].trim());
-                    match x {
-                    Err(x) => { return Err(format!("{}", x).to_string()); }
-                    Ok(x)  => { x }
-                    }
-                },
-                group_id: {
-                    let x = i64::from_str(tokens[1].trim());
-                    match x {
-                    Err(x) => { return Err(format!("{}", x).to_string()); }
-                    Ok(x)  => { x }
-                    }
-                },
-                expr: {
-                    let mut cpy = tokens[2].to_string();
-                    cpy.retain(|x| { x != ' ' });
-                    parse(cpy)?
-                },
-                response: tokens[3].to_string(),
-            })
+            match ALIASES.lock().unwrap().get_by_left(tokens[1].trim()) {
+            Some(x) => {
+                Ok(Expression {
+                    added_by: {
+                        let x = i64::from_str(tokens[0].trim());
+                        match x {
+                        Err(x) => { return Err(format!("{}", x).to_string()); }
+                        Ok(x)  => { x }
+                        }
+                    },
+                    group_id: *x,
+                    expr: {
+                        let mut cpy = tokens[2].to_string();
+                        cpy.retain(|x| { x != ' ' });
+                        parse(cpy)?
+                    },
+                    response: tokens[3].to_string(),
+                })
+            }
+            None => {
+                Err(WRONG_ALIAS.to_string())
+            }
+            }
         }
     }
 }
