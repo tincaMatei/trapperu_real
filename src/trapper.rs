@@ -1,15 +1,19 @@
 use teloxide::prelude::*;
 
 pub mod adauga;
+pub mod dao;
 
 use crate::trapper::adauga::Expression;
+use crate::trapper::dao::Markov;
 use rand::thread_rng;
 use rand::prelude::SliceRandom;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Trapper {
     pub commands: Vec<Expression>,
     pub thoughts: Vec<String>,
+    pub markov: Markov,
 }
 
 impl Trapper {
@@ -17,6 +21,7 @@ impl Trapper {
         Trapper {
             commands: vec![],
             thoughts: vec![],
+            markov: Markov::new(),
         }
     }
 

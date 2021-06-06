@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::io::prelude::*;
 use std::fs::File;
 use std::fs;
+use std::borrow::Borrow;
 
 use lazy_static::lazy_static;
 
@@ -14,6 +15,7 @@ use teloxide::types::{MessageKind, MediaKind};
 
 use crate::trapper::adauga::Expression;
 use crate::trapper::Trapper;
+use crate::trapper::dao::Markov;
 use bimap::BiMap;
 use crate::constants::*;
 
@@ -42,46 +44,17 @@ fn save_bot_data() {
     log::info!("Saving all bot data");
 
     let mut statemap = STATEMAP.lock().unwrap();
-    let mut all_commands: Vec<Expression> = Vec::new();
-    let mut all_thoughts: Vec<(String, i64)> = Vec::new();
-    let hash_keys: Vec<i64> = statemap.keys().map(|x| { *x } ).collect();
-
-    for k in hash_keys {
-        let trapper = statemap.remove(&k);
-
-        if let Some(mut trapper) = trapper {
-            while trapper.commands.len() > 0 {
-                all_commands.push(trapper.commands.pop().unwrap());
-            }
-            while trapper.thoughts.len() > 0 {
-                all_thoughts.push((trapper.thoughts.pop().unwrap(), k));
-            }
-        }
-    }
-
-    let serialized_comm = serde_json::to_string(&all_commands).unwrap();
-    let serialized_thoughts = serde_json::to_string(&all_thoughts).unwrap();
-
-    let file = File::create("data.JSON");
-    match file {
-    Ok(mut file) => {
-        file.write_all(serialized_comm.as_bytes())
-            .expect("Failed to write all the data in the file");
-        
-    }
-    Err(x) => {
-        log::info!("Failed to create data.JSON: {}", x);
-    }
-    }
     
-    let file = File::create("thoughts.JSON");
+    log::info!("Serializing statemap");
+    let serialized_statemap = serde_json::to_string(&*statemap).unwrap();
+    let file = File::create("data2.JSON");
     match file {
     Ok(mut file) => {
-        file.write_all(serialized_thoughts.as_bytes())
+        file.write_all(serialized_statemap.as_bytes())
             .expect("Failed to write all the data in the file");
     }
     Err(x) => {
-        log::info!("Failed to create thoughts.JSON: {}", x);
+        log::info!("Failed to create data2.JSON: {}", x);
     }
     }
 
@@ -120,77 +93,24 @@ fn exit_program() {
 
 fn load_bot_data() -> HashMap<i64, trapper::Trapper> {
     log::info!("Loading all commands");
-    let deserialized = fs::read_to_string("data.JSON");
-
+    let deserialized = fs::read_to_string("data2.JSON");
     let deserialized = match deserialized {
-    Ok(x)  => { x }
+    Ok(x) => { x }
     Err(x) => {
-        log::error!("Failed to read data from data.JSON: {}", x);
+        log::error!("Failed to read data from data2.JSON: {}", x);
         String::new()
     }
     };
 
-    let all_commands = serde_json::from_str(&deserialized);
-    let mut all_commands: Vec<Expression> = match all_commands {
-    Ok(x) => { x }
-    Err(x) => {
-        log::error!("Failed deserializing data.JSON: {}", x);
-        Vec::new()
-    }
-    };
-
-    let mut statemap: HashMap<i64, trapper::Trapper> = HashMap::new();
-
-    while !all_commands.is_empty() {
-        let command = all_commands.pop().unwrap();
-        
-        let mut trapper = if let Some(x) = statemap.remove(&command.group_id) {
-            x
-        } else {
-            Trapper::new()
-        };
-        
-        let chat_id = command.group_id;
-        trapper.commands.push(command);
-
-        statemap.insert(chat_id, trapper);
-    }
+    let statemap = serde_json::from_str(&deserialized);
     
-    log::info!("Loaded all commands");
-
-    log::info!("Loading all thoughts");
-    let deserialized = fs::read_to_string("thoughts.JSON");
-
-    let deserialized = match deserialized {
+    match statemap {
     Ok(x) => { x }
     Err(x) => {
-        log::info!("Failed to read data from thoughts.JSON: {}", x);
-        String::new()
+        log::error!("Failed deserializing data2.JSON: {}", x);
+        panic!();
     }
-    };
-
-    let all_thoughts = serde_json::from_str(&deserialized);
-    let mut all_thoughts: Vec<(String, i64)> = match all_thoughts {
-    Ok(x) => { x }
-    Err(x) => {
-        log::info!("Failed deserializing thoughts.JSON: {}", x);
-        Vec::new()
     }
-    };
-
-    while !all_thoughts.is_empty() {
-        // this shouldn't panic
-        let (thought, chat_id) = all_thoughts.pop().unwrap();
-        let mut trapper = match statemap.remove(&chat_id) { 
-            Some(x) => { x } 
-            None => {trapper::Trapper::new()} 
-        };
-    
-        trapper.thoughts.push(thought);
-        statemap.insert(chat_id, trapper);
-    }
-
-    statemap
 }
 
 fn load_aliases() -> BiMap<String, i64> {
@@ -464,6 +384,36 @@ async fn run_command(command: BotCommands, message: UpdateWithCx<AutoSend<Bot>, 
             .log_on_error()
             .await;
     }
+    BotCommands::Dao => {
+        let chat_id = message.update.chat_id();
+        let response = {
+            let mut statemap = STATEMAP.lock().unwrap();
+            let mut trapper = match statemap.remove(&chat_id) {
+                None => { trapper::Trapper::new() }
+                Some(x) => { x }
+            };
+
+            let response = trapper.markov.get_random();
+            statemap.insert(chat_id, trapper);
+
+            response
+        };
+
+        match response {
+        Some(x) => {
+            message.answer(x)
+                .await
+                .log_on_error()
+                .await;
+        }
+        None => {
+            message.answer("n-o dau da-te dreq")
+                .await
+                .log_on_error()
+                .await;
+        }
+        }
+    }
     _ => {
     }
     };
@@ -496,6 +446,7 @@ pub async fn process_message(message: UpdateWithCx<AutoSend<Bot>, Message>) {
         
         let response = {
             let mut statemap = STATEMAP.lock().unwrap();
+            
             let trapper = statemap.remove(&message.update.chat_id());
 
             if let Some(mut trapper) = trapper {
@@ -505,6 +456,9 @@ pub async fn process_message(message: UpdateWithCx<AutoSend<Bot>, Message>) {
                 } else {
                     "".to_string()
                 };
+
+                trapper.markov.add_sequence(message_text);
+
                 statemap.insert(message.update.chat_id(), trapper);
                 response
             } else {

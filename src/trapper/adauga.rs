@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use crate::ALIASES;
 use crate::constants::*;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Expression {
     added_by: i64,
     expr: ExpressionTree,
@@ -12,7 +12,7 @@ pub struct Expression {
     pub group_id: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 enum ExpressionTree {
     Variable(String),
     OrSign(Box<(ExpressionTree, ExpressionTree)>),
@@ -118,7 +118,6 @@ impl FromStr for Expression {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        
         let tokens: Vec<&str> = s.split('~').collect();
         
         if tokens.len() != 4 {
@@ -158,8 +157,9 @@ mod tests {
     #[test]
     fn good_test() {
         assert_eq!(
-            Expression::from_str("1256262~asDf    |    milsugi     & (coaie | pula)~test"), 
+            Expression::from_str("1256262~yeet~asDf    |    milsugi     & (coaie | pula)~test"), 
             Ok(Expression {
+                group_id: -469444439,
                 added_by: 1256262,
                 expr: 
                 ExpressionTree::AndSign(Box::new((
@@ -179,32 +179,32 @@ mod tests {
 
     #[test]
     fn bad_separators() {
-        assert_eq!(Expression::from_str("125~asdf|milsugi|(coaie|pula)~test~test"),
-            Err(BAD_SEPARATORS));
+        assert_eq!(Expression::from_str("125~yeet~asdf|milsugi|(coaie|pula)~test~test"),
+            Err(BAD_SEPARATORS.to_string()));
     }
 
     #[test]
     fn not_enough_parantheses() {
-        assert_eq!(Expression::from_str("1262~asdf|milsugi|(coaie|pula~test"),
-            Err(BAD_PARANTHESES));
+        assert_eq!(Expression::from_str("1262~yeet~asdf|milsugi|(coaie|pula~test"),
+            Err(BAD_PARANTHESES.to_string()));
     }
     
     #[test]
     fn too_many_parantheses() {
-        assert_eq!(Expression::from_str("1262~asdf|milsugi|(coaie|pula))~test"),
-            Err(BAD_PARANTHESES));
+        assert_eq!(Expression::from_str("1262~yeet~asdf|milsugi|(coaie|pula))~test"),
+            Err(BAD_PARANTHESES.to_string()));
     }
 
     #[test]
     fn bad_operator() {
-        assert_eq!(Expression::from_str("1262~asdf|milsugi^(coaie|pula)~test"),
-            Err(BAD_PARANTHESES));
+        assert_eq!(Expression::from_str("1262~yeet~asdf|milsugi^(coaie|pula)~test"),
+            Err(BAD_PARANTHESES.to_string()));
     }
 
     #[test]
     fn illegal_characters() {
-        assert_eq!(Expression::from_str("1262~asdf|.milsugi|(coaie|pula)~test"),
-            Err(BAD_CHARACTERS));
+        assert_eq!(Expression::from_str("1262~yeet~asdf|.milsugi|(coaie|pula)~test"),
+            Err(BAD_CHARACTERS.to_string()));
     }
 }
 
