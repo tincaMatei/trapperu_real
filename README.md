@@ -4,6 +4,8 @@ Trapperu Real (Romanian for "The Real Trapper") is a telegram bot made to annoy 
 
 Note: The responses of the bot are all in Romanian and they may contain vulgar language.
 
+If you want to try this bot out, check @aztegang_shitpost_bot on telegram.
+
 ## What does the bot do?
 
 * /joaco - Iane, joaco (Romanian for "[Ian](https://www.youtube.com/channel/UCXEsaxE4BOzgDKa2kG48koA), play it")
@@ -14,6 +16,7 @@ Note: The responses of the bot are all in Romanian and they may contain vulgar l
 * /alias [Alias] - Sets the group alias to the parameter
 * /gindeste [Alias]~[Thought] - gindeste (gandeste, Romanian for "think!"), adds a thought to the memory of the bot
 * /gind - gind (gand, Romanian for "thought") returns a memorised thought, display it on the chat and then deletes it from its memory
+* /dao - dao (da-o, Romanian for "give it", "play it") will generate a random message using the previously sent messages with Markov chains
 
 ## Installation
 
